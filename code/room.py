@@ -108,11 +108,11 @@ def import_rooms():
     rooms = [
         Room(join("maps", "tsx", "4.tmx"), random_wall_config()),
         Room(join("maps", "tsx", "1.tmx"), random_wall_config()),
-        # Room(join("maps", "tsx", "1.tmx"), random_wall_config()),
-        # Room(join("maps", "tsx", "2.tmx"), random_wall_config()),
         Room(join("maps", "tsx", "2.tmx"), random_wall_config()),
         Room(join("maps", "tsx", "3.tmx"), random_wall_config()),
+        Room(join("maps", "tsx", "5.tmx"), random_wall_config()),
         Room(join("maps", "tsx", "4.tmx"), random_wall_config()),
+
         # add more rooms...
     ]
 
