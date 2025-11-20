@@ -72,6 +72,10 @@ class Enemy(pygame.sprite.Sprite):
         super().__init__(groups)
         self.player = player
 
+        # destroy enemy after 20 seconds
+        self.spawn_time = pygame.time.get_ticks()
+        self.lifetime = 20000
+
         # image
         self.frames, self.frame_index = frames, 1
         self.image = self.frames[self.frame_index]
@@ -116,6 +120,7 @@ class Enemy(pygame.sprite.Sprite):
                     if self.direction.y > 0: self.hitbox_rect.bottom = sprite.rect.top
     
     def destroy(self):
+        """When enemy gets killed apply "damage" effect """
         # start a timer
         self.death_time = pygame.time.get_ticks()
         # change the image
@@ -127,9 +132,14 @@ class Enemy(pygame.sprite.Sprite):
         if pygame.time.get_ticks() - self.death_time >= self.death_duration:
             self.kill()
 
+    def despawn(self):
+        if pygame.time.get_ticks() - self.spawn_time >= self.lifetime:
+            self.kill()
+
     def update(self, dt):
         if self.death_time == 0:
             self.move(dt)
             self.animate(dt)
         else:
             self.death_timer()
+        self.despawn()
