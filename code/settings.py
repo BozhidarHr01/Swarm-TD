@@ -5,7 +5,7 @@ from os import walk
 WINDOW_WIDTH, WINDOW_HEIGHT = 1600, 900
 TILE_SIZE = 16
 
-ROOM_COUNT = 25
+ROOM_COUNT = 50
 
 # scale camera
 CAMERA_WIDTH = WINDOW_WIDTH // 2   # 2x zoom

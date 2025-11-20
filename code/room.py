@@ -111,6 +111,7 @@ def import_rooms():
         Room(join("maps", "tsx", "2.tmx"), random_wall_config()),
         Room(join("maps", "tsx", "3.tmx"), random_wall_config()),
         Room(join("maps", "tsx", "5.tmx"), random_wall_config()),
+        Room(join("maps", "tsx", "6.tmx"), random_wall_config()),
         Room(join("maps", "tsx", "4.tmx"), random_wall_config()),
 
         # add more rooms...
@@ -121,8 +122,8 @@ def import_rooms():
 def add_walls(placed, positions, wall_horizontal_up, wall_horizontal_down, wall_vertical_left, wall_vertical_right):
     """
     Adds wall rooms on the edges of each room that have no neighbor.
-    placed: dict of grid coords → Room
-    positions: dict of grid coords → pixel coords
+    placed: dict of grid coords -> Room
+    positions: dict of grid coords -> pixel coords
     Returns updated dict with wall rooms.
     """
     new_placed = dict(placed)
