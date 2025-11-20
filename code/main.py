@@ -63,7 +63,7 @@ class Game:
             direction_y = mouse_y - WINDOW_HEIGHT / 2
             direction = pygame.Vector2(direction_x, direction_y).normalize()
 
-            Bullet(self.bullet_surf, pos, direction, (self.all_sprites, self.bullet_sprites))
+            Bullet(self.bullet_surf, pos, direction, (self.all_sprites, self.bullet_sprites), self.collision_sprites)
 
             self.can_shoot = False
             self.shoot_time = pygame.time.get_ticks()
@@ -153,7 +153,7 @@ class Game:
             self.input()
             self.all_sprites.update(dt)
             self.bullet_collision()
-            self.player_collision()
+            # self.player_collision() 
 
             # draw
             self.camera_surface.fill('#1d1c2b')
