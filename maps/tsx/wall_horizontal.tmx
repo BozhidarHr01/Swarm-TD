@@ -32,7 +32,7 @@
 </data>
  </layer>
  <objectgroup id="4" name="entities"/>
- <objectgroup id="3" name="collisions">
+ <objectgroup id="3" name="collisions" visible="0">
   <object id="2" x="0" y="0" width="320" height="80"/>
   <object id="6" x="0" y="0" width="320" height="80"/>
  </objectgroup>
