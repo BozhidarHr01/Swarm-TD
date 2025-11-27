@@ -26,6 +26,7 @@ class Game:
         self.collision_sprites = pygame.sprite.Group()
         self.bullet_sprites = pygame.sprite.Group()
         self.enemy_sprites = pygame.sprite.Group()
+        self.turret_sprites = pygame.sprite.Group()
 
         # attack timer
         self.can_shoot = True
@@ -36,6 +37,10 @@ class Game:
         self.enemy_event = pygame.event.custom_type()
         pygame.time.set_timer(self.enemy_event, 300)
         self.spawn_positions = []
+
+        # build mode
+        self.build_mode = False
+        self.money = STARTING_MONEY
 
         self.load_images()
         self.setup()
@@ -55,6 +60,7 @@ class Game:
                     self.enemy_frames[folder].append(surf)
 
     def input(self):
+        # shooting
         if pygame.mouse.get_pressed()[0] and self.can_shoot:
             pos = self.player.rect.center + self.player.direction * 10
             
@@ -63,10 +69,38 @@ class Game:
             direction_y = mouse_y - WINDOW_HEIGHT / 2
             direction = pygame.Vector2(direction_x, direction_y).normalize()
 
-            Bullet(self.bullet_surf, pos, direction, (self.all_sprites, self.bullet_sprites), self.collision_sprites)
+            Bullet(self.bullet_surf, pos, direction, (self.all_sprites, self.bullet_sprites), self.collision_sprites, self.enemy_sprites, game=self)
 
             self.can_shoot = False
             self.shoot_time = pygame.time.get_ticks()
+
+    def get_mouse_pos(self):
+        mx, my = pygame.mouse.get_pos()
+
+        mx /= WINDOW_WIDTH / self.camera_width
+        my /= WINDOW_HEIGHT / self.camera_height
+
+        world_x = mx + self.player.rect.centerx - self.camera_width // 2
+        world_y = my + self.player.rect.centery - self.camera_height // 2
+
+        return pygame.Vector2(world_x, world_y)
+    
+    def place_turret(self, pos):
+        # print('#', len(self.turret_sprites))
+        if len(self.turret_sprites) >= MAX_TURRET_COUNT:
+            return
+        if self.money < TURRET_COST:
+            return
+        
+        pos.x = round(pos.x / TILE_SIZE) * TILE_SIZE
+        pos.y = round(pos.y / TILE_SIZE) * TILE_SIZE
+
+        Turret(pos, pygame.Surface((32,32)), (self.all_sprites, self.turret_sprites), self.bullet_surf,
+               (self.all_sprites, self.bullet_sprites), self.all_sprites, self.collision_sprites, self.enemy_sprites, game)
+        self.money -= TURRET_COST
+        self.build_mode = False
+        print('#', len(self.turret_sprites))
+        print("$", self.money)
 
     def attack_timer(self):
         if not self.can_shoot:
@@ -115,18 +149,12 @@ class Game:
                 elif obj.name == 'Enemy':
                     self.spawn_positions.append((px + obj.x, py + obj.y))
 
-    def bullet_collision(self):
-        if self.bullet_sprites:
-            for bullet in self.bullet_sprites:
-                collision_sprites = pygame.sprite.spritecollide(bullet, self.enemy_sprites, False, pygame.sprite.collide_mask)
-                if collision_sprites:
-                    for sprite in collision_sprites:
-                        sprite.destroy()
-                    bullet.kill()
-
     def player_collision(self):
         if pygame.sprite.spritecollide(self.player, self.enemy_sprites, False, pygame.sprite.collide_mask):
-            self.running = False
+            self.player.take_damage(ENEMY_DAMAGE)
+            if self.player.health <= 0:
+                self.running = False
+
 
     def run(self):
         while self.running:
@@ -137,8 +165,19 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                # spawning enemies on their spawnpoints
                 if event.type == self.enemy_event:
-                    Enemy(choice(self.spawn_positions), choice(list(self.enemy_frames.values())), (self.all_sprites, self.enemy_sprites), self.player, self.collision_sprites)
+                    if len(self.enemy_sprites) < MAX_ENEMY_COUNT:
+                        Enemy(choice(self.spawn_positions), choice(list(self.enemy_frames.values())), (self.all_sprites, self.enemy_sprites), self.player, self.collision_sprites, game=self)
+                # turning build mode on and off
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_1:
+                        self.build_mode = not self.build_mode
+                # turret placing
+                if self.build_mode and event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 3:
+                        mouse_world_pos = self.get_mouse_pos()
+                        self.place_turret(mouse_world_pos)
 
             # zoom camera with scroll
                 if event.type == pygame.MOUSEWHEEL:
@@ -151,16 +190,43 @@ class Game:
             # update
             self.attack_timer()
             self.input()
-            self.all_sprites.update(dt)
-            self.bullet_collision()
-            # self.player_collision() 
+
+
+            self.player_collision() 
 
             # draw
             self.camera_surface.fill('#1d1c2b')
-            self.all_sprites.draw(self.player.rect.center, self.camera_surface)
+            # self.all_sprites.draw(self.player.rect.center, self.camera_surface)
+            
+            cam_offset_x = self.player.rect.centerx - self.camera_width // 2
+            cam_offset_y = self.player.rect.centery - self.camera_height // 2
+
+            for sprite in self.all_sprites:
+                if sprite != self.player:
+                    sprite_rect = sprite.rect.copy()
+                    sprite_rect.topleft = (sprite.rect.x - cam_offset_x, sprite.rect.y - cam_offset_y)
+                    self.camera_surface.blit(sprite.image, sprite_rect)
+                
+            player_rect = self.player.rect.copy()
+            player_rect.topleft = (self.player.rect.x - cam_offset_x, self.player.rect.y - cam_offset_y)
+            self.player.draw(self.camera_surface, player_rect)
+            
+            # Building ghost preview
+            if self.build_mode:
+                ghost_pos = self.get_mouse_pos()
+
+
+                ghost_cam_x = ghost_pos.x - cam_offset_x
+                ghost_cam_y = ghost_pos.y - cam_offset_y
+
+                ghost_rect = pygame.Rect(ghost_cam_x - 16, ghost_cam_y - 16, 32, 32)
+                pygame.draw.rect(self.camera_surface, (0,200,0, 30), ghost_rect)
 
             zoomed_view = pygame.transform.scale(self.camera_surface, (WINDOW_WIDTH, WINDOW_HEIGHT))
             self.display_surface.blit(zoomed_view, (0, 0))
+
+
+            self.all_sprites.update(dt)
             pygame.display.flip()
         pygame.quit()
 

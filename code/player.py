@@ -11,6 +11,18 @@ class Player(pygame.sprite.Sprite):
         
         # attack
         self.player_direction = pygame.Vector2(0, 1)
+        self.health = 5
+
+        # invulnerability timer so the player doesn't die instantly
+        self.invulnerable = False
+        self.invuln_time = 1000
+        self.last_hit_time = 0
+
+        # flash the player when taking damage
+        self.flash_interval = 100
+        self.last_flash_time = 0
+        self.visible = True
+
         # movement
         self.direction = pygame.Vector2()
         self.speed = 250
@@ -57,6 +69,17 @@ class Player(pygame.sprite.Sprite):
         self.collision('vertical')
         self.rect.center = self.hitbox_rect.center
 
+    def take_damage(self, amount):
+        now = pygame.time.get_ticks()
+
+        if not self.invulnerable:
+            self.health -= amount
+            self.invulnerable = True
+            self.last_hit_time = now
+            self.last_flash_time = now
+            self.visible = False
+            print("took damage")
+
     def collision(self, direction):
         for sprite in self.collision_sprites:
             if sprite.rect.colliderect(self.hitbox_rect):
@@ -77,19 +100,28 @@ class Player(pygame.sprite.Sprite):
         # animate
         self.frame_index = self.frame_index + 8 * dt if self.direction else 0
         self.image = self.frames[self.state][int(self.frame_index % len(self.frames[self.state]))]
-
-    def shoot_animation(self, dt):
-        # get state
-        if self.direction.x != 0:
-            self.state  = 'right' if self.direction.x > 0 else 'left'
-        if self.direction.y != 0:
-            self.state  = 'down' if self.direction.y > 0 else 'up'
-
-        # animate
-        self.frame_index = self.frame_index + 8 * dt if self.direction else 0
-        self.image = self.frames[self.state][int(self.frame_index % len(self.frames[self.state]))]
     
     def update(self, dt):
+        now = pygame.time.get_ticks()
+
+        if self.invulnerable:
+            if now - self.last_hit_time >= self.invuln_time:
+                self.invulnerable = False
+                self.visible = True
+            else:
+                if now - self.last_flash_time >= self.flash_interval:
+                    self.last_flash_time = now
+                    self.visible = not self.visible
+
         self.input()
         self.move(dt)
         self.animate(dt)
+
+    def draw(self, surface, rect):
+        surface.blit(self.frames[self.state][int(self.frame_index % len(self.frames[self.state]))], rect.topleft)
+
+        if self.invulnerable and not self.visible:
+            mask = pygame.mask.from_surface(self.frames[self.state][int(self.frame_index % len(self.frames[self.state]))])
+            outline_surf = mask.to_surface(setcolor=(255,0,0, 100), unsetcolor=(0,0,0,0))
+            outline_surf.set_colorkey((0,0,0))
+            surface.blit(outline_surf, rect.topleft)
