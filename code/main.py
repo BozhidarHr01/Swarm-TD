@@ -1,10 +1,14 @@
 from settings import * 
 from player import Player
-from sprites import *
+from sprites import Sprite
+from turret import Turret
+from enemy import Enemy
+from bullet import Bullet
 
 from groups import AllSprites
 from room import Room, generate_map_with_positions, import_rooms, add_walls
 from random import randint, choice
+from hud import HUD
 
 class Game:
     def __init__(self):
@@ -42,12 +46,21 @@ class Game:
         self.build_mode = False
         self.money = STARTING_MONEY
 
+        # HUD
+        self.kills = 0
+        self.hud = HUD(self)
+
         self.load_images()
         self.setup()
 
     def load_images(self):
         self.bullet_surf = pygame.image.load(join('images', 'fireball', 'fireball.png')).convert_alpha()
         self.bullet_surf = pygame.transform.scale(self.bullet_surf, (16, 16))
+
+        self.turret_base = pygame.image.load(join('images', 'turret', 'base.png')).convert_alpha()
+        self.turret_base = pygame.transform.scale(self.turret_base, (24,24))
+        self.turret_gun = pygame.image.load(join('images', 'turret', 'gun.png')).convert_alpha()
+        self.turret_gun = pygame.transform.scale(self.turret_gun, (24,9))
 
         folders = list(walk(join('images', 'enemies')))[0][1]
         self.enemy_frames = {}
@@ -95,7 +108,7 @@ class Game:
         pos.x = round(pos.x / TILE_SIZE) * TILE_SIZE
         pos.y = round(pos.y / TILE_SIZE) * TILE_SIZE
 
-        Turret(pos, pygame.Surface((32,32)), (self.all_sprites, self.turret_sprites), self.bullet_surf,
+        Turret(pos, self.turret_base, self.turret_gun, (self.all_sprites, self.collision_sprites, self.turret_sprites), self.bullet_surf,
                (self.all_sprites, self.bullet_sprites), self.all_sprites, self.collision_sprites, self.enemy_sprites, game)
         self.money -= TURRET_COST
         self.build_mode = False
@@ -172,7 +185,17 @@ class Game:
                 # turning build mode on and off
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_1:
-                        self.build_mode = not self.build_mode
+                        self.hud.select_slot(0)
+                        self.build_mode = True if self.hud.selected_slot == 0 else False
+                    if event.key == pygame.K_2:
+                        self.hud.select_slot(1)
+                        self.build_mode = True if self.hud.selected_slot == 1 else False
+                    if event.key == pygame.K_3:
+                        self.hud.select_slot(2)
+                        self.build_mode = True if self.hud.selected_slot == 2 else False
+                    if event.key == pygame.K_e: #exit build mode
+                        self.build_mode = False
+
                 # turret placing
                 if self.build_mode and event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 3:
@@ -200,13 +223,27 @@ class Game:
             
             cam_offset_x = self.player.rect.centerx - self.camera_width // 2
             cam_offset_y = self.player.rect.centery - self.camera_height // 2
+            self.all_sprites.update(dt)
 
             for sprite in self.all_sprites:
+
                 if sprite != self.player:
-                    sprite_rect = sprite.rect.copy()
-                    sprite_rect.topleft = (sprite.rect.x - cam_offset_x, sprite.rect.y - cam_offset_y)
-                    self.camera_surface.blit(sprite.image, sprite_rect)
                 
+                    # draw the turret gun 
+                    if isinstance(sprite, Turret):
+                        base_rect = sprite.rect.copy()
+                        base_rect.topleft = (sprite.rect.x - cam_offset_x, sprite.rect.y - cam_offset_y)
+                        self.camera_surface.blit(sprite.image, base_rect)
+
+                        # draw turret gun
+                        gun_rect = sprite.gun_rect.copy()
+                        gun_rect.topleft = (sprite.gun_rect.x - cam_offset_x, sprite.gun_rect.y - cam_offset_y)
+                        self.camera_surface.blit(sprite.gun_image, gun_rect)
+                    else:
+                        sprite_rect = sprite.rect.copy()
+                        sprite_rect.topleft = (sprite.rect.x - cam_offset_x, sprite.rect.y - cam_offset_y)
+                        self.camera_surface.blit(sprite.image, sprite_rect)
+
             player_rect = self.player.rect.copy()
             player_rect.topleft = (self.player.rect.x - cam_offset_x, self.player.rect.y - cam_offset_y)
             self.player.draw(self.camera_surface, player_rect)
@@ -219,14 +256,29 @@ class Game:
                 ghost_cam_x = ghost_pos.x - cam_offset_x
                 ghost_cam_y = ghost_pos.y - cam_offset_y
 
-                ghost_rect = pygame.Rect(ghost_cam_x - 16, ghost_cam_y - 16, 32, 32)
-                pygame.draw.rect(self.camera_surface, (0,200,0, 30), ghost_rect)
+                if self.hud.selected_slot == 0:
+                    ghost_image = pygame.transform.scale(self.turret_base, (24,24))
+                elif self.hud.selected_slot == 1:
+                    ghost_image = pygame.Surface((TILE_SIZE,TILE_SIZE))
+                    ghost_image.fill((150,150,150))
+                elif self.hud.selected_slot == 2:
+                    ghost_image = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                    ghost_image.fill((200,0,150))
+
+                ghost_image.set_alpha(120)
+
+                grid_x = round(ghost_cam_x / TILE_SIZE) * TILE_SIZE
+                grid_y = round(ghost_cam_y / TILE_SIZE) * TILE_SIZE
+
+                ghost_rect = ghost_image.get_frect(center=(grid_x, grid_y))
+                self.camera_surface.blit(ghost_image, ghost_rect)
+                # pygame.draw.rect(self.camera_surface, (0,200,0, 30), ghost_rect)
 
             zoomed_view = pygame.transform.scale(self.camera_surface, (WINDOW_WIDTH, WINDOW_HEIGHT))
             self.display_surface.blit(zoomed_view, (0, 0))
+            self.hud.draw(self.display_surface)
 
-
-            self.all_sprites.update(dt)
+            # self.all_sprites.update(dt)
             pygame.display.flip()
         pygame.quit()
 

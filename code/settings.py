@@ -25,4 +25,9 @@ MAX_TURRET_COUNT = 5
 # money 
 STARTING_MONEY = 100
 TURRET_COST = 25
+WALL_COST = 50
+TRAP_COST = 100
 ENEMY_KILL_MONEY_REWARD = 1
+
+# custom font
+FONT_PATH = join('font', 'ScienceGothic.ttf')

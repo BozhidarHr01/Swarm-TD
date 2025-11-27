@@ -1,4 +1,5 @@
 from settings import * 
+from turret import Turret
 
 class AllSprites(pygame.sprite.Group):
     def __init__(self):
@@ -20,4 +21,11 @@ class AllSprites(pygame.sprite.Group):
 
         for layer in [ground_sprites, object_sprites]:
             for sprite in layer:
-                surface.blit(sprite.image, sprite.rect.topleft + self.offset)
+                if isinstance(sprite, Turret):
+                    base_rect = sprite.rect.topleft + self.offset
+                    surface.blit(sprite.image, base_rect)
+
+                    gun_rect = sprite.gun_rect.topleft + self.offset
+                    surface.blit(sprite.gun_image, gun_rect)
+                else:
+                    surface.blit(sprite.image, sprite.rect.topleft + self.offset)
