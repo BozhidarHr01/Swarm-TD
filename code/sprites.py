@@ -1,5 +1,4 @@
 from settings import *
-# from math import atan2, degrees
 
 class Sprite(pygame.sprite.Sprite):
     def __init__(self, pos, surf, groups, ground = False):
@@ -7,351 +6,198 @@ class Sprite(pygame.sprite.Sprite):
         self.image = surf
         self.rect = self.image.get_frect(topleft = pos)
         self.ground = ground
+        self.is_floor = False
         self.old_rect = self.rect.copy()
 
-# class Bullet(pygame.sprite.Sprite):
-#     def __init__(self, surf, pos, direction, groups, collision_sprites, enemy_sprites, game):
-#         super().__init__(groups)
-#         self.image = surf
-#         self.rect = self.image.get_frect(center = pos)
-#         self.spawn_time = pygame.time.get_ticks()
-#         self.lifetime = 3000
-#         self.enemy_sprites = enemy_sprites
-#         self.game = game
+class Trap(pygame.sprite.Sprite):
+    def __init__(self, pos, surf, groups, animation_frames, game):
+        super().__init__(groups)
+        self.image = surf
+        self.game = game
+        self.rect = self.image.get_frect(center=pos)
+        self.old_rect = self.rect.copy()
 
-#         self.hitbox_rect = self.rect
-#         self.collision_sprites = collision_sprites
-#         self.old_rect = self.rect.copy()
+        self.pos = pygame.Vector2(pos)
+        self.angle = 0
+        self.ground = True
+        self.is_buildable = True
+        
+        # trigger
+        self.damage = TRAP_DAMAGE
+        self.triggered = False
+        self.damage_dealt = False
 
-#         self.direction = direction
-#         self.speed = 350
+        # animation
+        self.animation_frames = animation_frames
+        self.frame_index = 0
+        self.animation_speed = TRAP_ANIMATION_SPEED
+        self.animation_time = TRAP_ANIMATION_TIME
     
-#     def move(self, dt):
-#         self.rect.x += self.direction.x * self.speed * dt
-#         self.collision('horizontal')
-#         self.rect.y += self.direction.y * self.speed * dt
-#         self.collision('vertical')
-#         # self.rect.center = self.hitbox_rect.center
-
-#     def collision(self, direction):
-#         for sprite in self.collision_sprites:
-#             if sprite.rect.colliderect(self.hitbox_rect):
-#                 if direction == 'horizontal':
-#                     if self.rect.right >= sprite.rect.left and self.old_rect.right <= sprite.old_rect.left:
-#                         self.rect.right = sprite.rect.left
-#                         self.direction.x *= -1
-#                     if self.rect.left <= sprite.rect.right and self.old_rect.left >= sprite.old_rect.right:
-#                         self.rect.left = sprite.rect.right
-#                         self.direction.x *= -1
-
-#                 else:
-#                     if self.rect.bottom >= sprite.rect.top and self.old_rect.bottom <= sprite.old_rect.top:
-#                         self.rect.bottom = sprite.rect.top
-#                         self.direction.y *= -1
-#                     if self.rect.top <= sprite.rect.bottom and self.old_rect.top >= sprite.old_rect.bottom:
-#                         self.rect.top = sprite.rect.bottom
-#                         self.direction.y *= -1
-
-#     def check_enemy_hit(self):
-#         for sprite in self.enemy_sprites:
-#             if hasattr(sprite, "take_hit"):
-#                 if sprite.rect.colliderect(self.rect):
-#                     sprite.take_hit(self.game)
-#                     self.kill()
-#                     break
-
-#     def update(self, dt):
-#         self.old_rect = self.rect.copy()
-#         # self.rect.center += self.direction * self.speed * dt
-#         self.move(dt)
-#         self.animate()
-#         self.collision(self.direction)
-
-#         self.check_enemy_hit()
-
-#         if pygame.time.get_ticks() - self.spawn_time >= self.lifetime:
-#             self.kill()
-
-#     def animate(self):
-#         self.image = pygame.transform.rotate(self.image, 90)
-
-# class Enemy(pygame.sprite.Sprite):
-#     def __init__(self, pos, frames, groups, player, collision_sprites, game):
-#         super().__init__(groups)
-#         self.player = player
-#         self.health = ENEMY_HEALTH
-
-#         # destroy enemy after 20 seconds
-#         self.spawn_time = pygame.time.get_ticks()
-#         self.lifetime = 20000 # ms
-
-#         # image
-#         self.frames, self.frame_index = frames, 1
-#         self.image = self.frames[self.frame_index]
-#         self.animation_speed = 6
-
-#         # rect
-#         self.rect = self.image.get_frect(center = pos)
-#         self.hitbox_rect = self.rect.inflate(-10, -10)
-#         self.collision_sprites = collision_sprites
-#         self.direction = pygame.Vector2()
-#         self.speed = 150
-#         self.old_rect = self.rect.copy()
-
-#         # timer
-#         self.death_time = 0
-#         self.death_duration = 1
-
-#         # flash when taking damage
-#         self.flash_duration = 100 # ms
-#         self.flash_start_time = 0
-#         self.is_flashing = False
-#         self.mask = pygame.mask.from_surface(self.image)
-#         self.original_image = self.image.copy()
-
-#     def animate(self, dt):
-#         self.frame_index += self.animation_speed * dt
-#         self.image = self.frames[int(self.frame_index) % len(self.frames)]
-
-#         self.original_image = self.image.copy()
-#         self.mask = pygame.mask.from_surface(self.image)
-
-#     def move(self, dt):
-#         # get direction
-#         player_pos = pygame.Vector2(self.player.rect.center)
-#         enemy_pos = pygame.Vector2(self.rect.center)
-#         self.direction = (player_pos - enemy_pos).normalize()
-
-#         # update the rect position + collision logic
-#         self.hitbox_rect.centerx += self.direction.x * self.speed * dt
-#         self.collisions('horizontal')
-#         self.hitbox_rect.centery += self.direction.y * self.speed * dt
-#         self.collisions('vertical')
-#         self.rect.center = self.hitbox_rect.center
+    def update(self, dt, enemies):
+        if not self.triggered:
+            self.check_collision(enemies)
+        else:
+            self.animate(dt)
+            if self.frame_index >= 4 and not self.damage_dealt:
+                self.deal_damage(enemies)
+                self.damage_dealt = True
     
-#     def collisions(self, direction):
-#         for sprite in self.collision_sprites:
-#             if sprite.rect.colliderect(self.hitbox_rect):
-#                 if direction == 'horizontal':
-#                     if self.direction.x > 0: self.hitbox_rect.right = sprite.rect.left
-#                     if self.direction.x < 0: self.hitbox_rect.left = sprite.rect.right
-#                 else:
-#                     if self.direction.y < 0: self.hitbox_rect.top = sprite.rect.bottom
-#                     if self.direction.y > 0: self.hitbox_rect.bottom = sprite.rect.top
+    def check_collision(self, enemies):
+        hits = pygame.sprite.spritecollide(self, enemies, False, pygame.sprite.collide_mask)
+        if hits:
+            for enemy in hits:
+                enemy.take_hit(self.game, self.damage)
+            self.triggered = True
+            self.frame_index = 0
     
-#     def take_hit(self, game):
-#         self.health -= PLAYER_DAMAGE
-
-#         self.is_flashing = True
-#         self.flash_start_time = pygame.time.get_ticks()
-
-#         if self.health <= 0:
-#             # death 'animation'
-#             surf = pygame.mask.from_surface(self.frames[0]).to_surface()
-#             surf.set_colorkey('white')
-#             self.image = surf
-#             self.destroy()
-
-#             if game:
-#                 game.money += ENEMY_KILL_MONEY_REWARD
-#                 game.kills += 1
-
-#     def destroy(self):
-#         """When enemy gets killed apply "damage" effect """
-#         # start a timer
-#         self.death_time = pygame.time.get_ticks()
-#         # change the image
-#         surf = pygame.mask.from_surface(self.frames[0]).to_surface()
-#         surf.set_colorkey('black')
-#         self.image = surf
-
-#     def death_timer(self):
-#         if pygame.time.get_ticks() - self.death_time >= self.death_duration:
-#             self.kill()
-
-#     def despawn(self):
-#         if pygame.time.get_ticks() - self.spawn_time >= self.lifetime:
-#             self.kill()
-
-#     def update(self, dt):
-#         now = pygame.time.get_ticks()
-
-#         if self.death_time == 0:
-#             self.move(dt)
-#             self.animate(dt)
-#         else:
-#             self.death_timer()
-#         self.despawn()
-        
-#         if self.is_flashing:
-#             if now - self.flash_start_time <= self.flash_duration:
-#                 flash = pygame.Surface(self.image.get_size(), pygame.SRCALPHA)
-#                 flash.fill((255, 155, 0, 100))
-#                 mask_surf = self.mask.to_surface(setcolor=(255,0,0,100), unsetcolor=(0,0,0,0))
-#                 mask_surf.set_colorkey((0,0,0))
-#                 self.image = self.original_image.copy()
-#                 self.image.blit(mask_surf, (0,0))
-#             else:
-#                 self.is_flashing = False
-#                 self.image = self.original_image
-
-
-# class Turret(pygame.sprite.Sprite):
-#     def __init__(self, pos, surf, gun_surf, groups, bullet_surf, bullet_sprites, all_sprites, collision_sprites, enemy_sprites, game):
-#         super().__init__(groups)
-#         self.image = surf
-#         self.rect = self.image.get_frect(center=pos)
-#         self.pos = pygame.Vector2(pos)
-#         self.old_rect = self.rect.copy()
-
-#         self.bullet_surf = bullet_surf
-#         self.collision_sprites = collision_sprites
-#         self.bullet_sprites = bullet_sprites
-#         self.all_sprites = all_sprites
-#         self.enemy_sprites = enemy_sprites
-#         self.game = game
-        
-#         self.range_radius=300
-#         self.fire_rate=1
-#         self.turret_interval = 100
-#         self.last_shot_time = 0
-
-#         self.current_target = None
-#         self.nearby_walls = []
-
-#         # gun
-#         self.gun_original = gun_surf
-#         self.gun_image = gun_surf
-#         self.gun_rect = self.gun_image.get_rect(center=self.pos)
-
-#         # timers
-#         self.los_timer = 0
-#         self.los_check_interval = 500 # ms
-#         self.shoot_timer = 0
-
-#         self.last_los_check = pygame.time.get_ticks()
-#         self.last_shot_time = pygame.time.get_ticks()
-   
-#     def find_target(self):
-#         closest_enemy = None
-#         min_dist = float('inf')
-
-#         for enemy in self.enemy_sprites:
-#             enemy_pos = pygame.Vector2(enemy.rect.center)
-#             distance = (enemy_pos - self.pos).length()
-
-#             if distance <= self.range_radius and distance < min_dist:
-#                 if self.has_line_of_sight(enemy_pos):
-#                     min_dist = distance
-#                     closest_enemy = enemy
-#         self.current_target = closest_enemy
-#         if self.current_target:
-#             self.nearby_walls = self.get_nearby_walls(pygame.Vector2(self.current_target.rect.center))
-#         else:
-#             self.nearby_walls = []
-
-#     def update_target(self, dt):
-#         self.los_timer += dt
-#         if self.los_timer >= self.los_check_interval:
-#             self.los_timer = 0
-#             if (self.current_target is None or self.current_target not in self.enemy_sprites or
-#                 (pygame.Vector2(self.current_target.rect.center) - self.pos).length() > self.range_radius):
-#                 self.current_target = self.find_target()
-#                 if self.current_target:
-#                     self.nearby_walls = self.get_nearby_walls(pygame.Vector2(self.current_target.rect.center))
-#                 else:
-#                     self.nearby_walls = []
-
-#     def get_nearby_walls(self, target_pos, margin=64):
-#         min_x = min(self.pos.x, target_pos.x) - margin
-#         max_x = max(self.pos.x, target_pos.x) + margin
-#         min_y = min(self.pos.y, target_pos.y) - margin
-#         max_y = max(self.pos.y, target_pos.y) + margin
-
-#         nearby_walls = [wall for wall in self.collision_sprites
-#                         if min_x <= wall.rect.right and max_x >= wall.rect.left
-#                         and min_y <= wall.rect.top and max_y >= wall.rect.bottom]
-#         return nearby_walls
+    def deal_damage(self, enemies):
+        hits = pygame.sprite.spritecollide(self, enemies, False, pygame.sprite.collide_mask)
+        for enemy in hits:
+            enemy.take_hit(self.game, self.damage)
     
-#     def has_line_of_sight(self, target_pos):
-#         if not self.nearby_walls:
-#             return True
+    def animate(self, dt):
+        if self.animation_frames:
+            self.frame_index += self.animation_speed
+            if self.frame_index >= len(self.animation_frames):
+                self.kill()
+            else:
+                self.image = self.animation_frames[int(self.frame_index)]
 
-#         direction = target_pos - self.pos
-#         steps = int(direction.length())
-#         if steps == 0:
-#             return True
+class BarbedWire(pygame.sprite.Sprite):
+    def __init__(self, pos, surf, groups, game, rotation = 0, slow_factor = WIRE_SLOW_FACTOR):
+        super().__init__(groups)
+
+        self.game = game
+        self.original_image = surf
+        self.image = pygame.transform.rotate(self.original_image, rotation)
+        self.rect = self.image.get_frect(center=pos)
+        self.old_rect = self.rect.copy()
+        self.is_buildable = True
+
+        self.pos = pygame.Vector2(pos)
+        self.ground = True
+
+        self.slow_factor = slow_factor
+        self.affected_enemies = set()
+
+    def update(self, dt, enemies):
+        hits = pygame.sprite.spritecollide(self, enemies, False, pygame.sprite.collide_mask)
+        current_enemies = set(hits)
+
+        for enemy in current_enemies - self.affected_enemies:
+            enemy.speed *= self.slow_factor
         
-#         direction = direction.normalize()
-
-#         for i in range(0, steps, 10):
-#             check_pos = self.pos + direction * i
-#             check_rect = pygame.Rect(check_pos.x, check_pos.y, 2, 2)
-#             for wall in self.nearby_walls:
-#                 if wall.rect.colliderect(check_rect):
-#                     return False
-#         return True
-
-#     def shoot(self):
-#         if not self.current_target:
-#             return
+        for enemy in self.affected_enemies - current_enemies:
+            enemy.speed /= self.slow_factor
         
-#         now = pygame.time.get_ticks()
-#         fire_interval = self.turret_interval / self.fire_rate
+        self.affected_enemies = current_enemies
 
-#         if now - self.last_shot_time >= fire_interval:
-#             self.last_shot_time = now 
+    def rotate(self, angle):
+        self.angle = (self.angle + angle) % 180
+        self.image = pygame.transform.rotate(self.image, self.angle)
+        self.rect = self.image.get_frect(center=self.rect.center)
 
-#             direction = pygame.Vector2(self.current_target.rect.center) - self.pos
-#             if direction.length() != 0:
-#                 direction = direction.normalize()
+class Bomb(pygame.sprite.Sprite):
+    def __init__(self, surf, start_pos, target_pos, game, groups, enemy_sprites):
+        super().__init__(groups)
+        self.game = game
+        self.image = surf
+        self.rect = self.image.get_frect(center=start_pos)
 
-#             gun_tip_offset = pygame.Vector2(self.gun_image.get_width(), 0).rotate(-direction.angle_to(pygame.Vector2(1,0)))
-#             bullet_pos = self.pos + gun_tip_offset
+        self.pos = pygame.Vector2(start_pos)
+        self.target_pos = pygame.Vector2(target_pos)
+        self.speed = 300
+        self.enemy_sprites = enemy_sprites
 
-#             Bullet(self.bullet_surf, bullet_pos, direction, (self.bullet_sprites, self.all_sprites), self.collision_sprites, self.enemy_sprites, self.game)
+        self.exploded = False
+        self.lifetime = 3000
+        self.spawn_time = pygame.time.get_ticks()
+
+    def update(self, dt):
+        direction = (self.target_pos - self.pos)
+        distance = direction.length()
+        if distance > 0:
+            direction = direction.normalize()
+            move = direction * self.speed * dt
+            if move.length() > distance:
+                move = direction * distance
+            self.pos += move
+            self.rect.center = self.pos
+        elapsed = pygame.time.get_ticks() - self.spawn_time
+        if elapsed >= self.lifetime and not self.exploded:
+            self.explode()            
+
+
+    def draw_countdown(self, surface, cam_offset):
+        draw_pos = pygame.Vector2(self.rect.topleft) + cam_offset
+        surface.blit(self.image, draw_pos)
+
+        elapsed = pygame.time.get_ticks() - self.spawn_time
+        remaining_ratio = max(0, (self.lifetime - elapsed) / self.lifetime)
+
+        bar_width = self.rect.width
+        bar_height = 5
+
+        bar_bg_rect = pygame.Rect(draw_pos.x, draw_pos.y - 10, bar_width, bar_height)
+        bar_fg_rect = pygame.Rect(draw_pos.x, draw_pos.y - 10, bar_width * remaining_ratio, bar_height)
+        pygame.draw.rect(surface, (80,80,80), bar_bg_rect)
+        pygame.draw.rect(surface, (255,0,0), bar_fg_rect)
     
-#     def rotate_gun(self, target_pos):
-#         dir_vec = pygame.Vector2(target_pos) - self.pos
-#         if dir_vec.length() == 0:
-#             return
-        
-#         dx, dy = dir_vec.x, dir_vec.y
+    def explode(self):
+        explosion_radius = 500
+        for enemy in self.enemy_sprites:
+            if pygame.Vector2(enemy.rect.center).distance_to(self.pos) <= explosion_radius:
+                enemy.take_hit(self.game, BOMB_DAMAGE)
+        self.kill()
 
-#         angle_rad = atan2(dy,dx)
-#         angle_deg = degrees(angle_rad)
 
-#         rot_angle = -angle_deg
-        
-#         rotated_image = pygame.transform.rotate(self.gun_original, rot_angle)
-#         rotated_rect = rotated_image.get_frect()
+class Upgrade(pygame.sprite.Sprite):
+    def __init__(self, pos, upgrade_type, groups):
+        super().__init__(groups)
+        self.upgrade_type = upgrade_type
 
-#         orig_rect = self.gun_original.get_frect()
-#         pivot = pygame.Vector2(orig_rect.center, orig_rect.height / 2)
+        upgrade_data = next(upgrade for upgrade in UPGRADES if upgrade['name'] == upgrade_type)
+        self.icon = pygame.image.load(upgrade_data['image']).convert_alpha()
+        self.icon = pygame.transform.scale(self.icon, (25, 25))
+        self.image = pygame.Surface((UPGRADE_SIZE, UPGRADE_SIZE), pygame.SRCALPHA)
+        self.rect = self.image.get_frect(center=pos)
+        self.image.set_alpha(120)
 
-#         orig_center = pygame.Vector2(orig_rect.center)
-#         vec_center_to_pivot = pivot - orig_center
+        self.color_map = {
+            'Heal' : (0,255,0),
+            'HealthUp' : (220, 20, 20),
+            'Damage' : (100,20,20),
+            'Money' : (0,100,20),
+            'FireRate' : (0, 255, 255),
+            'Speed' : (0,255,0),
+            'Range' : (200, 0, 255),
+        }
+        pygame.draw.ellipse(self.image, self.color_map[upgrade_type], (0,0,30,30))
+        self.rect = self.image.get_frect(center=pos)
 
-#         rotated_vec = vec_center_to_pivot.rotate(rot_angle)
+    def draw(self, surface, offset):
+        draw_pos = self.rect.topleft + offset
 
-#         world_pivot = pygame.Vector2(self.pos)
-#         rotated_center = world_pivot - rotated_vec
+        # draw base box
+        surface.blit(self.image, draw_pos)
+        icon_rect = self.icon.get_frect(center=self.rect.center + offset)
 
-#         rotated_rect.center = (rotated_center.x, rotated_center.y)
+        font = pygame.font.Font(FONT_PATH, 12)
+        text_surf = font.render(self.upgrade_type, True, (255,255,255))
+        text_rect = text_surf.get_frect(midtop=(icon_rect.centerx, icon_rect.bottom ))
+        surface.blit(text_surf, text_rect)
+        # draw icon centered
+        surface.blit(self.icon, icon_rect)
 
-#         self.gun_image = rotated_image
-#         self.gun_rect = rotated_rect
 
-    
-#     def update(self, dt):
-#         now = pygame.time.get_ticks()
+class Portal(pygame.sprite.Sprite):
+    def __init__(self, pos, game):
+        super().__init__(game.all_sprites)
+        self.image = pygame.image.load(join('images', 'portal', 'portal.png')).convert_alpha()
+        self.image = pygame.transform.scale(self.image, (135, 135))
+        self.rect = self.image.get_frect(center=pos)
+        self.game = game
 
-#         if now - self.last_los_check >= self.los_check_interval:
-#             self.last_los_check = now
-#             self.find_target()
-        
-#         # rotate gun
-#         if self.current_target:
-#             self.rotate_gun(pygame.Vector2(self.current_target.rect.center))
-
-#         self.shoot()
+    def update(self, dt):
+        if self.rect.colliderect(self.game.player.rect):
+            self.game.enter_boss_room()

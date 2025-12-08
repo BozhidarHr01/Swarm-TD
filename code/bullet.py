@@ -1,21 +1,22 @@
 from settings import *
 
 class Bullet(pygame.sprite.Sprite):
-    def __init__(self, surf, pos, direction, groups, collision_sprites, enemy_sprites, game):
+    def __init__(self, surf, pos, direction, lifetime, shooter, groups, collision_sprites, enemy_sprites, game, speed = BULLET_SPEED):
         super().__init__(groups)
         self.image = surf
         self.rect = self.image.get_frect(center = pos)
         self.spawn_time = pygame.time.get_ticks()
-        self.lifetime = 3000
+        self.lifetime = lifetime
         self.enemy_sprites = enemy_sprites
         self.game = game
+        self.shooter = shooter
 
         self.hitbox_rect = self.rect
         self.collision_sprites = collision_sprites
         self.old_rect = self.rect.copy()
 
         self.direction = direction
-        self.speed = 350
+        self.speed = speed
     
     def move(self, dt):
         self.rect.x += self.direction.x * self.speed * dt
@@ -45,9 +46,9 @@ class Bullet(pygame.sprite.Sprite):
 
     def check_enemy_hit(self):
         for sprite in self.enemy_sprites:
-            if hasattr(sprite, "take_hit"):
+            if hasattr(sprite, 'take_hit'):
                 if sprite.rect.colliderect(self.rect):
-                    sprite.take_hit(self.game)
+                    sprite.take_hit(self.game, self.shooter.damage)
                     self.kill()
                     break
 
@@ -65,3 +66,25 @@ class Bullet(pygame.sprite.Sprite):
 
     def animate(self):
         self.image = pygame.transform.rotate(self.image, 90)
+
+class RockProjectile(pygame.sprite.Sprite):
+    def __init__(self, pos, direction, game):
+        super().__init__(game.all_sprites, game.bullet_sprites)
+        self.game = game
+        self.image = pygame.image.load(join('images', 'boss', 'rock.png')).convert_alpha()
+        self.image = pygame.transform.scale(self.image, (64,64))
+        self.rect = self.image.get_frect(center=pos)
+        self.direction = direction
+        self.speed = 350
+        self.lifetime = 2000
+        self.spawn = pygame.time.get_ticks()
+
+    def update(self, dt):
+        self.rect.center += self.direction * self.speed * dt
+
+        if self.rect.colliderect(self.game.player.rect):
+            self.game.player.take_hit(self.game, BOSS_ROCK_DAMAGE)
+            self.kill()
+        
+        if pygame.time.get_ticks() - self.spawn > self.lifetime:
+            self.kill()

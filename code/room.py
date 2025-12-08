@@ -1,162 +1,161 @@
 from settings import *
-from sprites import *
 import pytmx
-from collections import deque
+import os
+from os.path import join
 import random
 
 class Room:
-    def __init__(self, tmx_path, wall_config):
-        """
-        wall_config example:
-        {
-            "top": True, 
-            "bottom": False,
-            "left": False,
-            "right": True
-        }
-        """
-        self.tmx_path = tmx_path
-        self.tmx = pytmx.load_pygame(tmx_path)
-        self.walls = wall_config
+    def __init__(self, path, doors=None):
+        # path: path to tmx file
+        # doors: dict {'top': False, 'bottom': False, 'left': True, 'right': False}
 
+        self.path = path
+        self.tmx = pytmx.load_pygame(path)
+        self.doors = doors or {'top': False, 'bottom': False, 'left': False, 'right': False}
         self.width = self.tmx.width
         self.height = self.tmx.height
+        
+        # enemy spawning for each room
+        self.enemies_spawned = False
+        self.spawn_points = []
+        self.enemies = []
+        self.loot_spawned = False
+        self.is_start = False
 
-    def compatible(self, b, direction: str):
-        if direction == "right":
-            return (not self.walls["right"]) and (not b.walls["left"])
-        if direction == "left":
-            return (not self.walls["left"]) and (not b.walls["right"])
-        if direction == "top":
-            return (not self.walls["top"]) and (not b.walls["bottom"])
-        if direction == "bottom":
-            return (not self.walls["bottom"]) and (not b.walls["top"])
-        return False
-    
-def generate_map_with_positions(start_room, room_list, max_rooms=7):
-    """
-    Generate a map using rooms, repeating rooms if needed.
-    Returns:
-        placed: {(grid_x, grid_y): Room}
-        positions: {(grid_x, grid_y): (pixel_x, pixel_y)}
-    """
-    placed = {}
-    positions = {}
-    queue = deque()
-
-    # Start with the first room at (0,0)
-    placed[(0, 0)] = start_room
-    positions[(0, 0)] = (0, 0)
-    queue.append((0, 0, start_room))
-
-    dirs = {
-        "left": (-1, 0),
-        "right": (1, 0),
-        "top": (0, -1),
-        "bottom": (0, 1)
-    }
-
-    rooms_placed = 1
-
-    while queue and rooms_placed < max_rooms:
-        x, y, room = queue.popleft()
-        px, py = positions[(x, y)]
-
-        for direction, (dx, dy) in dirs.items():
-            nx, ny = x + dx, y + dy
-            if (nx, ny) in placed:
-                continue
-
-            random.shuffle(room_list)
-            for candidate in room_list:
-                if Room.compatible(room, candidate, direction):
-                    placed[(nx, ny)] = candidate
-
-                    # Calculate pixel positions based on room dimensions
-                    if direction == "left":
-                        positions[(nx, ny)] = (px - candidate.width * TILE_SIZE, py)
-                    elif direction == "right":
-                        positions[(nx, ny)] = (px + room.width * TILE_SIZE, py)
-                    elif direction == "top":
-                        positions[(nx, ny)] = (px, py - candidate.height * TILE_SIZE)
-                    elif direction == "bottom":
-                        positions[(nx, ny)] = (px, py + room.height * TILE_SIZE)
-
-                    queue.append((nx, ny, candidate))
-                    rooms_placed += 1
-                    break
-
-            if rooms_placed >= max_rooms:
-                break
-
-    return placed, positions
-
-def random_wall_config():
-    """
-    Choose one of four sides and set its wall_config to have a wall
-    """
-    sides = ["top", "bottom", "left", "right"]
-    chosen = random.choice(sides)
-    
-    config = {side: False for side in sides}
-    config[chosen] = True
-    return config
+        # minimap state
+        self.visited = False
+        self.cleared = False
 
 def import_rooms():
-    start_room = Room(join("maps", "tsx", "start.tmx"), {"top": False, "bottom": False, "left": False, "right": False})
+    # import normal rooms and the start room
+    rooms = []
+    start_room = None
 
-    rooms = [
-        Room(join("maps", "tsx", "4.tmx"), random_wall_config()),
-        Room(join("maps", "tsx", "1.tmx"), random_wall_config()),
-        Room(join("maps", "tsx", "2.tmx"), random_wall_config()),
-        Room(join("maps", "tsx", "3.tmx"), random_wall_config()),
-        Room(join("maps", "tsx", "5.tmx"), random_wall_config()),
-        Room(join("maps", "tsx", "6.tmx"), random_wall_config()),
-        Room(join("maps", "tsx", "4.tmx"), random_wall_config()),
+    for filename in os.listdir(ROOMS_DIR):
+        if not filename.endswith('.tmx'):
+            continue
 
-        # add more rooms...
-    ]
+        path = join(ROOMS_DIR, filename)
+        tmx = pytmx.load_pygame(path) 
+
+        # detect doors from a 'doors' object layer
+        doors = {'top': False, 'bottom': False, 'left': False, 'right': False}
+        for obj in tmx.get_layer_by_name('doors'):
+            if hasattr(obj, 'name') and obj.name.lower() in doors:
+                doors[obj.name.lower()] = True
+
+        room = Room(path, doors)
+
+        # detect start room
+        if 'start' in filename.lower():
+            start_room = room
+        else:
+            rooms.append(room)
 
     return start_room, rooms
 
-def add_walls(placed, positions, wall_horizontal_up, wall_horizontal_down, wall_vertical_left, wall_vertical_right):
-    """
-    Adds wall rooms on the edges of each room that have no neighbor.
-    placed: dict of grid coords -> Room
-    positions: dict of grid coords -> pixel coords
-    Returns updated dict with wall rooms.
-    """
-    new_placed = dict(placed)
+def generate_map_with_positions(start_room, rooms, max_rooms):
+    placed = {(0, 0): start_room}
+    positions = {(0, 0): (0, 0)}
+    start_room.pos = (0, 0)
+
+    # get open doors of the start room
+    available_doors = [((0, 0), direction) for direction, open in start_room.doors.items() if open]
+
+    # expand rooms while there are available open doors
+    while available_doors and len(placed) < max_rooms:
+        # pick a random door to expand, then remove it so it doesnt get used twice
+        (gx, gy), direction = random.choice(available_doors)
+        available_doors.remove(((gx, gy), direction))
+
+        # pick a candidate room that has a door matching the opposite
+        candidates = [r for r in rooms if r.doors.get(opposite_direction(direction), False)]
+        if not candidates:
+            candidates = rooms  # fallback
+
+        template_room = random.choice(candidates)
+        room = Room(template_room.path, template_room.doors.copy())
+        new_grid = get_new_grid((gx, gy), direction)
+        if new_grid in placed:
+            continue
+
+        room.pos = new_grid
+        placed[new_grid] = room
+        positions[new_grid] = (new_grid[0] * room.width * TILE_SIZE,
+                               new_grid[1] * room.height * TILE_SIZE)
+
+        # add new doors
+        for d, open in room.doors.items():
+            if open and d != opposite_direction(direction):
+                new_pos = get_new_grid(new_grid, d)
+                if new_pos not in placed:
+                    available_doors.append((new_grid, d))
+
+    # after all rooms are placed add closed doors for each room
+    for (gx, gy), room in placed.items():
+        room.closed_doors = []
+        for direction, has_door in room.doors.items():
+            adjacent_pos = get_new_grid((gx, gy), direction)
+            if has_door and adjacent_pos not in placed:
+                room.closed_doors.append(direction)
+
+    return placed, positions
+
+def opposite_direction(direction):
+    return {'top':'bottom', 'bottom':'top', 'left':'right', 'right':'left'}[direction]
+
+def get_new_grid(grid, direction):
+    # calculates new grid coordinates
+    # if current is (0,0) and direction is right returns (1,0)
+    gx, gy = grid
+    if direction == 'top': return (gx, gy-1)
+    if direction == 'bottom': return (gx, gy+1)
+    if direction == 'left': return (gx-1, gy)
+    if direction == 'right': return (gx+1, gy)
+
+def add_room_colliders_with_doors(placed, positions, all_sprites, collision_sprites, tile_size=2 * TILE_SIZE, door_size=DOOR_SIZE):
+    # adds colliders to all walls with no adjacent rooms
+
+    # load textures once outsite the collider
+    WALL_TOP    = pygame.image.load(join('maps','tsx','tboi','door','up.png')).convert_alpha()
+    WALL_BOTTOM = pygame.image.load(join('maps','tsx','tboi','door','down.png')).convert_alpha()
+    WALL_LEFT   = pygame.image.load(join('maps','tsx','tboi','door','left.png')).convert_alpha()
+    WALL_RIGHT  = pygame.image.load(join('maps','tsx','tboi','door','right.png')).convert_alpha()
+
+    TEXTURES = {
+        'top': WALL_TOP,
+        'bottom': WALL_BOTTOM,
+        'left': WALL_LEFT,
+        'right': WALL_RIGHT
+    }
+
+    class Collider(pygame.sprite.Sprite):
+        def __init__(self, rect, direction, groups):
+            super().__init__(groups)
+            self.rect = rect
+            self.old_rect = self.rect
+
+            img = TEXTURES[direction]
+            self.image = pygame.transform.scale(img, (rect.width, rect.height))
     
     for (gx, gy), room in placed.items():
         px, py = positions[(gx, gy)]
-        room_width_px = room.width * TILE_SIZE
-        room_height_px = room.height * TILE_SIZE
+        w, h = room.width * tile_size , room.height * tile_size
 
-        # neighbors in grid
-        neighbors = {
-            "top": (gx, gy - 1),
-            "bottom": (gx, gy + 1),
-            "left": (gx - 1, gy),
-            "right": (gx + 1, gy)
-        }
+        # get neighbor room helper
+        def neighbor(pos, direction):
+            dx, dy = {'top':(0,-1),'bottom':(0,1),'left':(-1,0),'right':(1,0)}[direction]
+            return placed.get((pos[0]+dx,pos[1]+dy))
 
-        for direction, (nx, ny) in neighbors.items():
-            if (nx, ny) not in placed:
-                # Create a wall room for this direction
-                if direction == "top":
-                    wall = Room(wall_horizontal_up.tmx_path, wall_horizontal_up.walls)
-                    positions[(nx, ny)] = (px, py - wall.height * TILE_SIZE)
-                elif direction == "bottom":
-                    wall = Room(wall_horizontal_down.tmx_path, wall_horizontal_down.walls)
-                    positions[(nx, ny)] = (px, py + room_height_px)
-                elif direction == "left":
-                    wall = Room(wall_vertical_left.tmx_path, wall_vertical_left.walls)
-                    positions[(nx, ny)] = (px - wall.width * TILE_SIZE, py)
-                elif direction == "right":
-                    wall = Room(wall_vertical_right.tmx_path, wall_vertical_right.walls)
-                    positions[(nx, ny)] = (px + room_width_px, py)
+        for direction in ['top','bottom','left','right']:
+            if not (room.doors.get(direction) and neighbor((gx,gy), direction)):
+                if direction == 'top':
+                    Collider(pygame.Rect(px, py, w, 2 * tile_size), direction, (all_sprites, collision_sprites))
+                elif direction == 'bottom':
+                    Collider(pygame.Rect(px, py+h-2 * tile_size, w, 2 * tile_size), direction, (all_sprites, collision_sprites))
+                elif direction == 'left':
+                    Collider(pygame.Rect(px, py, 2 *tile_size, h), direction, (all_sprites, collision_sprites))
+                elif direction == 'right':
+                    Collider(pygame.Rect(px+w-2 * tile_size, py, 2 *tile_size, h), direction, (all_sprites, collision_sprites))
 
-                new_placed[(nx, ny)] = wall
-
-    return new_placed, positions
+    return placed, positions

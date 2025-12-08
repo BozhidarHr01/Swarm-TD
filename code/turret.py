@@ -17,9 +17,9 @@ class Turret(pygame.sprite.Sprite):
         self.enemy_sprites = enemy_sprites
         self.game = game
         
-        self.range_radius=300
-        self.fire_rate=1
-        self.turret_interval = 100
+        self.range_radius=TURRET_RANGE
+        self.fire_rate=TURRET_FIRE_RATE
+        self.turret_interval = TURRET_FIRE_INTERVAL
         self.last_shot_time = 0
 
         self.current_target = None
@@ -29,6 +29,8 @@ class Turret(pygame.sprite.Sprite):
         self.gun_original = gun_surf
         self.gun_image = gun_surf
         self.gun_rect = self.gun_image.get_rect(center=self.pos)
+        self.bullet_lifetime = BULLET_LIFETIME
+        self.damage = TURRET_DAMAGE
 
         # timers
         self.los_timer = 0
@@ -37,7 +39,11 @@ class Turret(pygame.sprite.Sprite):
 
         self.last_los_check = pygame.time.get_ticks()
         self.last_shot_time = pygame.time.get_ticks()
-   
+
+        # health (lifetime)
+        self.spawn_time = pygame.time.get_ticks()
+        self.lifetime = TURRET_LIFETIME
+
     def find_target(self):
         closest_enemy = None
         min_dist = float('inf')
@@ -115,7 +121,7 @@ class Turret(pygame.sprite.Sprite):
             gun_tip_offset = pygame.Vector2(self.gun_image.get_width(), 0).rotate(-direction.angle_to(pygame.Vector2(1,0)))
             bullet_pos = self.pos + gun_tip_offset
 
-            Bullet(self.bullet_surf, bullet_pos, direction, (self.bullet_sprites, self.all_sprites), self.collision_sprites, self.enemy_sprites, self.game)
+            Bullet(self.bullet_surf, bullet_pos, direction, self.bullet_lifetime, self, (self.bullet_sprites, self.all_sprites), self.collision_sprites, self.enemy_sprites, self.game)
     
     def rotate_gun(self, target_pos):
         dir_vec = pygame.Vector2(target_pos) - self.pos
@@ -147,11 +153,15 @@ class Turret(pygame.sprite.Sprite):
 
         self.gun_image = rotated_image
         self.gun_rect = rotated_rect
-
     
     def update(self, dt):
         now = pygame.time.get_ticks()
-
+        elapsed = now - self.spawn_time
+        # destroy turret if alive for TURRET_LIFETIME seconds
+        if elapsed >= self.lifetime:
+            self.kill()
+            return
+        
         if now - self.last_los_check >= self.los_check_interval:
             self.last_los_check = now
             self.find_target()

@@ -1,17 +1,19 @@
 from settings import * 
 
 class Player(pygame.sprite.Sprite):
-    def __init__(self, pos, groups, collision_sprites):
+    def __init__(self, pos, groups, player_sprites, collision_sprites):
         super().__init__(groups)
         self.load_images()
         self.state, self.frame_index = 'down', 3
-        self.image = pygame.image.load(join('images', 'player', 'down', '1.png')).convert_alpha()
+        self.image = pygame.image.load(join('images', 'player', 'down', '1.png')).convert_alpha() # use first frame as a static image
         self.rect = self.image.get_frect(center = pos)
-        self.hitbox_rect = self.rect.inflate(-10, -10)
+        self.hitbox_rect = self.rect.inflate(-13, -13)
         
         # attack
         self.player_direction = pygame.Vector2(0, 1)
-        self.health = 5
+        self.max_health = PLAYER_HEALTH
+        self.health = PLAYER_HEALTH
+        self.damage = PLAYER_DAMAGE
 
         # invulnerability timer so the player doesn't die instantly
         self.invulnerable = False
@@ -25,25 +27,15 @@ class Player(pygame.sprite.Sprite):
 
         # movement
         self.direction = pygame.Vector2()
-        self.speed = 250
+        self.speed = PLAYER_SPEED
         self.collision_sprites = collision_sprites
+        self.player_sprites = player_sprites
 
     def load_images(self):
         self.frames = {'left' : [], 'right' : [], 'up' : [], 'down' : []}
 
         for state in self.frames.keys():
             for folder_path, sub_folders, file_names in walk(join('images', 'player', state)):
-                if file_names:
-                    for file_name in file_names:
-                        full_path = join(folder_path, file_name)
-                        surf = pygame.image.load(full_path).convert_alpha()
-                        self.frames[state].append(surf)
-    
-    def load_images_attack(self):
-        self.frames = {'left' : [], 'right' : [], 'up' : [], 'down' : []}
-
-        for state in self.frames.keys():
-            for folder_path, sub_folders, file_names in walk(join('images', 'player', 'attack', state)):
                 if file_names:
                     for file_name in file_names:
                         full_path = join(folder_path, file_name)
@@ -63,13 +55,14 @@ class Player(pygame.sprite.Sprite):
         self.direction = self.direction.normalize() if self.direction else self.direction
 
     def move(self, dt):
+        
         self.hitbox_rect.x += self.direction.x * self.speed * dt
         self.collision('horizontal')
         self.hitbox_rect.y += self.direction.y * self.speed * dt
         self.collision('vertical')
         self.rect.center = self.hitbox_rect.center
 
-    def take_damage(self, amount):
+    def take_hit(self, game, amount):
         now = pygame.time.get_ticks()
 
         if not self.invulnerable:
@@ -78,7 +71,7 @@ class Player(pygame.sprite.Sprite):
             self.last_hit_time = now
             self.last_flash_time = now
             self.visible = False
-            print("took damage")
+            print('took damage')
 
     def collision(self, direction):
         for sprite in self.collision_sprites:
